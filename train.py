@@ -21,21 +21,17 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=8)
 
-    # model
-    parser.add_argument('--feat_dim', type=int, default=5)
-    parser.add_argument('--hidden_dim', type=int, default=512)
-    parser.add_argument('--nhead', type=int, default=8)
-    parser.add_argument('--nlayers', type=int, default=4)
-
     # optimizer
-    parser.add_argument('--num_iter', type=int, default=1_000_000)
-    parser.add_argument('--lr', type=float, default=0.000_1)
-    parser.add_argument('--gamma', type=float, default=0.9)
-    parser.add_argument('--step_size', type=int, default=100_000)
+    parser.add_argument('--num_iter', type=int, default=100_000)
+    parser.add_argument('--lr', type=float, default=0.0001)
+    parser.add_argument('--beta', type=float, default=0.02, help='SmoothL1Loss')
+    parser.add_argument('--step_size', type=int, default=10_000, help='stepLR')
+    parser.add_argument('--gamma', type=float, default=0.9, help='stepLR')
+    parser.add_argument('--clip_grad_norm', type=float, default=1.)
 
     # training
     parser.add_argument('--print_interval', type=int, default=100, help='unit: iter')
-    parser.add_argument('--save_interval', type=int, default=100_000, help='unit: iter')
+    parser.add_argument('--save_interval', type=int, default=10_000, help='unit: iter')
 
     args = parser.parse_args()
     return args
@@ -54,9 +50,13 @@ if __name__ == '__main__':
     '''
     Dataset
     '''
-    dataset = StockDataset(args.data_dir, args.inp_dim, args.out_dim)
-    # dataset = StockDataset(args.data_dir, args.inp_dim, args.out_dim, code_list=['005930'])
-    # dataset = StockDataset(args.data_dir, args.inp_dim, args.out_dim, code_list=['373220'])
+    dataset = StockDataset(
+        args.data_dir,
+        args.inp_dim,
+        args.out_dim,
+        # code_list=['005930'],  # samsung
+        code_list=['373220'],  # lgensol
+    )
     dataloader = DataLoader(dataset, batch_size=args.batch_size,
                             num_workers=args.num_workers, shuffle=True)
     print('len(dataset):', len(dataset))
@@ -66,20 +66,13 @@ if __name__ == '__main__':
     Model
     '''
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = TFModel(
-        args.inp_dim,
-        args.out_dim,
-        args.feat_dim,
-        args.hidden_dim,
-        args.nhead,
-        args.nlayers,
-    ).to(device)
+    model = TFModel(args.inp_dim, args.out_dim).to(device)
     model.train()
 
     '''
     Optimizer
     '''
-    criterion = torch.nn.L1Loss()
+    criterion = torch.nn.SmoothL1Loss(beta=args.beta)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=args.gamma)
 
@@ -101,8 +94,7 @@ if __name__ == '__main__':
             assert not torch.isinf(loss)
             assert not torch.isnan(loss)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
-            # torch.nn.utils.clip_grad_value_(model.parameters(), 0.01)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
             optimizer.step()
 
             # print

@@ -18,7 +18,13 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:, :x.shape[1]]
 
 class TFModel(nn.Module):
-    def __init__(self, iw, ow, ft_dim, d_model, nhead, nlayers):
+    def __init__(
+        self, iw, ow,
+        ft_dim=5,
+        d_model=512,
+        nhead=8,
+        nlayers=4,
+    ):
         super().__init__()
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -35,11 +41,6 @@ class TFModel(nn.Module):
             nn.Linear(ft_dim, d_model//2),
             nn.ReLU(),
             nn.Linear(d_model//2, d_model),
-        )
-        self.linear =  nn.Sequential(
-            nn.Linear(iw*d_model, ow*16),
-            nn.ReLU(),
-            nn.Linear(ow*16, ow),
         )
         self.linear1 =  nn.Sequential(
             nn.Linear(d_model, 64),
